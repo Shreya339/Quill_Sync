@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import Quill from "quill"
 import "quill/dist/quill.snow.css";
 import { io } from 'socket.io-client';
+import { useParams } from 'react-router-dom';
 
 const TOOLBAR_OPTIONS = [
   [{ 'font': [] }, { 'size': [] }],
@@ -32,56 +33,71 @@ export default function TextEditor() {
   }, [])
 
 
-/* ========= Detect changes whenever quill changes and emit it to Server ============ */
-useEffect(() => {
-  if (socket == null || quill == null) return;
+  /* ========= Detect changes whenever quill changes and emit it to Server ============ */
+  useEffect(() => {
+    if (socket == null || quill == null) return;
 
-  const handler = (delta, oldDelta, source) => {
-    if (source !== 'user') return;  // Ignore changes not initiated by the user
+    const handler = (delta, oldDelta, source) => {
+      if (source !== 'user') return;  // Ignore changes not initiated by the user
 
-    socket.emit("send-changes", delta);  // Emit changes to the server via socket
-  };
+      socket.emit("send-changes", delta);  // Emit changes to the server via socket
+    };
 
-  quill.on('text-change', handler);  // Attach text-change event listener to Quill
+    quill.on('text-change', handler);  // Attach text-change event listener to Quill
 
-  return () => {
-    quill.off('text-change', handler);  // Clean up: Remove event listener when component unmounts
-  };
-}, [socket, quill]) // Dependency array: Run effect when socket or quill changes
-
-
-/* ========= Detect whenever socket emits a change event and update text editor contents ============ */
-useEffect(() => {
-  if (socket == null || quill == null) return;
-
-  const handler = (delta) => {
-    quill.updateContents(delta)
-  };
-
-  socket.on('receive-changes', handler);  // Attach text-change event listener to Quill
-
-  return () => {
-    socket.off('text-change', handler);  // Clean up: Remove event listener when component unmounts
-  };
-}, [socket, quill]) // Dependency array: Run effect when socket or quill changes
+    return () => {
+      quill.off('text-change', handler);  // Clean up: Remove event listener when component unmounts
+    };
+  }, [socket, quill]) // Dependency array: Run effect when socket or quill changes
 
 
+  /* ========= Detect whenever socket emits a change event and update text editor contents ============ */
+  useEffect(() => {
+    if (socket == null || quill == null) return;
 
-/* ========= Render the Quill Text Editor ======== */
+    const handler = (delta) => {
+      quill.updateContents(delta)
+    };
 
-/* we need to render the text editor only once, when we first render the page
-Empty dependency array []  -> makes sure its rendered only the first time the component mounts */
-  
-const wrapperRef = useCallback(wrapper => {
+    socket.on('receive-changes', handler);  // Attach text-change event listener to Quill
+
+    return () => {
+      socket.off('text-change', handler);  // Clean up: Remove event listener when component unmounts
+    };
+  }, [socket, quill]) // Dependency array: Run effect when socket or quill changes
+
+
+ /*  ========== Set Content according to Document ID ========= */
+  const {documentId} = useParams()
+  useEffect(() => {
+    if(socket == null || socket == null) return
+
+    // event listener
+    socket.once('load-document', document => { 
+      quill.setContents(document)
+      quill.enable()
+    })
+
+    socket.emit('get-document', documentId)
+  }, [socket, quill, documentId])
+
+  /* ========= Render the Quill Text Editor ======== */
+
+  /* we need to render the text editor only once, when we first render the page
+  Empty dependency array []  -> makes sure its rendered only the first time the component mounts */
+
+  const wrapperRef = useCallback(wrapper => {
     if (wrapper == null) return
 
     wrapper.innerHTML = ""
     const editor = document.createElement("div")
     wrapper.append(editor)
     const q = new Quill(editor, { theme: "snow", modules: { toolbar: TOOLBAR_OPTIONS } })
+    q.disable()
+    q.setText('Loading...')
     setQuill(q)
   }, [])
 
-return <div class="container" ref={wrapperRef}></div>
+  return <div className="container" ref={wrapperRef}></div>
 
 }
